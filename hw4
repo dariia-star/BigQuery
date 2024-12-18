@@ -1,0 +1,31 @@
+WITH session_metrics AS (
+                    SELECT user_pseudo_id,
+                           (select value.int_value 
+                           from e.event_params
+                           where key='ga_session_id') as session_id,
+                           event_name,
+                           (select value.int_value
+                           from e.event_params
+                           where key = 'engaged_session_event') as session_engaged,
+                           (select value.int_value
+                           from e.event_params
+                           where key = 'engagement_time_msec') as engagement_time_msec
+                   FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`e
+                   WHERE e.event_name IN ('purchase')),
+final_table as (
+            SELECT user_pseudo_id,
+                   session_id,
+                   max ( case when cast (session_engaged as string) = '1'then 1 else 0 end) as engaged,
+                   sum(coalesce (engagement_time_msec, 0)) as total_engagement_time_msec,
+                   max (case when event_name = 'purchase' then 1 else 0 end) as made_purchase
+            FROM session_metrics
+            GROUP BY 1,2)
+SELECT 
+    corr(engaged, made_purchase) as correlation_engaged_purchase,
+    corr(total_engagement_time_msec, made_purchase) as correlation_time_purchase
+FROM final_table
+WHERE
+    engaged IS NOT NULL AND 
+    made_purchase IS NOT NULL AND 
+    total_engagement_time_msec IS NOT NULL
+LIMIT 5
