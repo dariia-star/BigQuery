@@ -1,0 +1,24 @@
+WITH table1 AS (
+          SELECT event_name,
+                 user_pseudo_id || cast((select value.int_value from  e.event_params where key='ga_session_id') as string) as unique_session_id,
+                 regexp_extract ((select value.string_value 
+                                  from e.event_params
+                                  where key = 'page_location'), r'^https?://[^/]+(/[^?]*)') AS page_path
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_2020*` e
+WHERE e.event_name IN ('session_start', 'purchase')
+),
+table_final AS (
+          SELECT page_path,
+                 count(distinct case when event_name = 'session_start'then unique_session_id end ) as count_session_start,
+                 count(distinct case when event_name = 'purchase' then unique_session_id end) as count_purchase
+          FROM table1
+          GROUP BY page_path
+)
+SELECT
+    page_path,
+    count_session_start,
+    count_purchase,
+    count_purchase/count_session_start as visit_to_purchase
+FROM table_final
+GROUP BY 1,2,3
+LIMIT 5
